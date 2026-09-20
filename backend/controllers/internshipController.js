@@ -126,7 +126,7 @@ export const createInternship = async (req, res) => {
             intern,
             startDate,
             endDate: endDate || null,
-            status: status || "UPCOMING"
+            status: status || "ACTIVE"
         });
 
 
@@ -321,8 +321,15 @@ export const updateInternship = async (req, res) => {
         }
 
         if (status !== undefined) {
-            internship.status = status;
-        }
+
+            if (!["ACTIVE", "COMPLETED"].includes(status)) {
+                return res.status(400).json({
+                message: "Status must be ACTIVE or COMPLETED"
+            });
+    }
+
+    internship.status = status;
+}
 
 
         await internship.save();

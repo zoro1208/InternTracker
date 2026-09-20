@@ -3,35 +3,62 @@ import { useEffect, useState } from "react";
 import api from "../../services/api.js";
 import BackButton from "../../components/BackButton.jsx";
 
-const InternTaskManagement = () => {
+const emptyForm = {
+    internship: "",
+    title: "",
+    description: "",
+    dueDate: ""
+};
+
+const MentorTasks = () => {
+    const [internships, setInternships] = useState([]);
     const [tasks, setTasks] = useState([]);
 
-    const [updatingId, setUpdatingId] = useState(null);
-
-    const [formData, setFormData] = useState({
-        status: "PENDING",
-        progress: 0,
-        hoursSpent: 0
-    });
+    const [formData, setFormData] = useState(emptyForm);
 
     const [loading, setLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
 
-    const fetchTasks = async () => {
+    const fetchData = async () => {
         try {
             setLoading(true);
             setError("");
 
-            const response = await api.get("/api/tasks");
+            const [
+                internshipsResponse,
+                tasksResponse
+            ] = await Promise.all([
+                api.get("/api/internships/my"),
+                api.get("/api/tasks")
+            ]);
 
-            setTasks(response.data.tasks || []);
+            const myInternships =
+                internshipsResponse.data.internships || [];
+
+            setInternships(myInternships);
+
+            setTasks(
+                tasksResponse.data.tasks || []
+            );
+
+            if (
+                myInternships.length > 0 &&
+                !formData.internship
+            ) {
+                setFormData((previous) => ({
+                    ...previous,
+                    internship: myInternships[0]._id
+                }));
+            }
         } catch (error) {
             console.error(error);
 
             setError(
                 error.response?.data?.message ||
-                "Failed to load assigned tasks"
+                "Failed to load tasks"
             );
         } finally {
             setLoading(false);
@@ -39,7 +66,7 @@ const InternTaskManagement = () => {
     };
 
     useEffect(() => {
-        fetchTasks();
+        fetchData();
     }, []);
 
     const handleChange = (e) => {
@@ -49,62 +76,69 @@ const InternTaskManagement = () => {
         });
     };
 
-    const startUpdate = (task) => {
-        setUpdatingId(task._id);
-
-        setFormData({
-            status: task.status || "PENDING",
-            progress: task.progress ?? 0,
-            hoursSpent: task.hoursSpent ?? 0
-        });
-
-        setError("");
-        setMessage("");
-    };
-
-    const cancelUpdate = () => {
-        setUpdatingId(null);
-
-        setFormData({
-            status: "PENDING",
-            progress: 0,
-            hoursSpent: 0
-        });
-
-        setError("");
-        setMessage("");
-    };
-
-    const handleUpdate = async (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!updatingId) {
+        if (isSubmitting) {
+            return;
+        }
+
+        setError("");
+        setMessage("");
+
+        if (!formData.internship) {
+            setError(
+                "Please select an internship."
+            );
+            return;
+        }
+
+        if (!formData.title.trim()) {
+            setError(
+                "Task title is required."
+            );
+            return;
+        }
+
+        if (!formData.dueDate) {
+            setError(
+                "Due date is required."
+            );
             return;
         }
 
         try {
-            setError("");
-            setMessage("");
+            setIsSubmitting(true);
 
-            await api.put(`/api/tasks/${updatingId}`, {
-                status: formData.status,
-                progress: Number(formData.progress),
-                hoursSpent: Number(formData.hoursSpent)
-            });
-
-            setMessage(
-                "Task progress updated successfully."
+            await api.post(
+                "/api/tasks/broadcast",
+                {
+                    internship: formData.internship,
+                    title: formData.title.trim(),
+                    description: formData.description.trim(),
+                    dueDate: formData.dueDate
+                }
             );
 
-            cancelUpdate();
-            await fetchTasks();
+            setMessage(
+                "Task assigned successfully."
+            );
+
+            setFormData({
+                ...emptyForm,
+                internship: formData.internship
+            });
+
+            await fetchData();
         } catch (error) {
             console.error(error);
 
             setError(
                 error.response?.data?.message ||
-                "Failed to update task"
+                "Failed to assign task"
             );
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -113,7 +147,9 @@ const InternTaskManagement = () => {
             return "N/A";
         }
 
-        return new Date(date).toLocaleDateString("en-IN");
+        return new Date(date).toLocaleDateString(
+            "en-IN"
+        );
     };
 
     const getStatusLabel = (status) => {
@@ -158,20 +194,16 @@ const InternTaskManagement = () => {
         (task) => task.status === "COMPLETED"
     ).length;
 
-    const inProgressTasks = tasks.filter(
-        (task) => task.status === "IN_PROGRESS"
-    ).length;
-
     const pendingTasks = tasks.filter(
         (task) => task.status === "PENDING"
     ).length;
 
-    const delayedTasks = tasks.filter(
-        (task) => task.status === "DELAYED"
+    const inProgressTasks = tasks.filter(
+        (task) => task.status === "IN_PROGRESS"
     ).length;
 
     const inputClass =
-        "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
+        "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
 
     if (loading) {
         return (
@@ -181,7 +213,7 @@ const InternTaskManagement = () => {
                         <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600"></div>
 
                         <p className="mt-4 text-sm font-medium text-slate-600">
-                            Loading assigned tasks...
+                            Loading tasks...
                         </p>
                     </div>
                 </div>
@@ -195,7 +227,7 @@ const InternTaskManagement = () => {
 
                 {/* Back Button */}
                 <div className="mb-4">
-                    <BackButton fallback="/intern/dashboard" />
+                    <BackButton fallback="/mentor/dashboard" />
                 </div>
 
                 {/* Header */}
@@ -218,12 +250,12 @@ const InternTaskManagement = () => {
 
                     <div className="mt-6">
                         <h2 className="text-2xl font-bold text-white sm:text-3xl">
-                            Assigned Tasks
+                            Manage Tasks
                         </h2>
 
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                            View tasks assigned by your mentor and update
-                            your execution progress.
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                            Create and assign tasks to your interns and
+                            monitor their progress.
                         </p>
                     </div>
                 </header>
@@ -245,7 +277,7 @@ const InternTaskManagement = () => {
                     </div>
                 )}
 
-                {/* Overview */}
+                {/* Task Summary */}
                 <section className="mb-8">
                     <div className="mb-4">
                         <h3 className="text-xl font-bold text-slate-900">
@@ -253,11 +285,24 @@ const InternTaskManagement = () => {
                         </h3>
 
                         <p className="mt-1 text-sm text-slate-500">
-                            Current status of your assigned tasks.
+                            Current task activity across your internships.
                         </p>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <p className="text-sm font-medium text-slate-500">
+                                Internships
+                            </p>
+
+                            <p className="mt-2 text-3xl font-bold text-slate-900">
+                                {internships.length}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-400">
+                                Available for assignment
+                            </p>
+                        </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                             <p className="text-sm font-medium text-slate-500">
@@ -269,7 +314,7 @@ const InternTaskManagement = () => {
                             </p>
 
                             <p className="mt-1 text-xs text-slate-400">
-                                Assigned by mentor
+                                Assigned tasks
                             </p>
                         </div>
 
@@ -278,7 +323,7 @@ const InternTaskManagement = () => {
                                 In Progress
                             </p>
 
-                            <p className="mt-2 text-3xl font-bold text-blue-700">
+                            <p className="mt-2 text-3xl font-bold text-slate-900">
                                 {inProgressTasks}
                             </p>
 
@@ -292,7 +337,7 @@ const InternTaskManagement = () => {
                                 Completed
                             </p>
 
-                            <p className="mt-2 text-3xl font-bold text-emerald-700">
+                            <p className="mt-2 text-3xl font-bold text-slate-900">
                                 {completedTasks}
                             </p>
 
@@ -300,186 +345,176 @@ const InternTaskManagement = () => {
                                 Completed tasks
                             </p>
                         </div>
-
-                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                            <p className="text-sm font-medium text-slate-500">
-                                Delayed
-                            </p>
-
-                            <p className="mt-2 text-3xl font-bold text-red-700">
-                                {delayedTasks}
-                            </p>
-
-                            <p className="mt-1 text-xs text-slate-400">
-                                Delayed tasks
-                            </p>
-                        </div>
-
                     </div>
 
-                    <div className="mt-3">
+                    <div className="mt-4">
                         <p className="text-xs text-slate-400">
                             Pending tasks:{" "}
-                            <span className="font-semibold text-amber-700">
+                            <span className="font-semibold text-slate-600">
                                 {pendingTasks}
                             </span>
                         </p>
                     </div>
                 </section>
 
-                {/* Update Task */}
-                {updatingId && (
-                    <section className="mb-8 rounded-2xl border border-blue-200 bg-white shadow-sm">
+                {/* Assign Task */}
+                <section className="mb-8 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+                        <h3 className="text-xl font-bold text-slate-900">
+                            Assign New Task
+                        </h3>
 
-                        <div className="border-b border-blue-100 bg-blue-50 px-5 py-5 sm:px-6">
-                            <h3 className="text-xl font-bold text-blue-950">
-                                Update Task Progress
-                            </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Create a task for an internship and assign it to
+                            its intern.
+                        </p>
+                    </div>
 
-                            <p className="mt-1 text-sm text-blue-700">
-                                Update only the execution details of the
-                                assigned task.
+                    {internships.length === 0 ? (
+                        <div className="px-5 py-12 text-center sm:px-6">
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500">
+                                T
+                            </div>
+
+                            <h4 className="mt-4 text-base font-semibold text-slate-900">
+                                No internships available
+                            </h4>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                                You need an assigned internship before
+                                creating tasks.
                             </p>
                         </div>
-
+                    ) : (
                         <form
-                            onSubmit={handleUpdate}
-                            className="px-5 py-6 sm:px-6"
+                            onSubmit={handleSubmit}
+                            className="space-y-6 px-5 py-6 sm:px-6"
                         >
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                            <div>
+                                <label
+                                    htmlFor="task-internship"
+                                    className="mb-2 block text-sm font-semibold text-slate-700"
+                                >
+                                    Internship
+                                </label>
 
-                                {/* Status */}
-                                <div>
-                                    <label
-                                        htmlFor="task-status"
-                                        className="mb-2 block text-sm font-semibold text-slate-700"
-                                    >
-                                        Status
-                                    </label>
+                                <select
+                                    id="task-internship"
+                                    name="internship"
+                                    value={formData.internship}
+                                    onChange={handleChange}
+                                    required
+                                    disabled={isSubmitting}
+                                    className={inputClass}
+                                >
+                                    <option value="">
+                                        Select Internship
+                                    </option>
 
-                                    <select
-                                        id="task-status"
-                                        name="status"
-                                        value={formData.status}
-                                        onChange={handleChange}
-                                        required
-                                        className={inputClass}
-                                    >
-                                        <option value="PENDING">
-                                            Pending
-                                        </option>
-
-                                        <option value="IN_PROGRESS">
-                                            In Progress
-                                        </option>
-
-                                        <option value="COMPLETED">
-                                            Completed
-                                        </option>
-
-                                        <option value="DELAYED">
-                                            Delayed
-                                        </option>
-                                    </select>
-                                </div>
-
-                                {/* Progress */}
-                                <div>
-                                    <label
-                                        htmlFor="task-progress"
-                                        className="mb-2 block text-sm font-semibold text-slate-700"
-                                    >
-                                        Progress (%)
-                                    </label>
-
-                                    <input
-                                        id="task-progress"
-                                        type="number"
-                                        name="progress"
-                                        min="0"
-                                        max="100"
-                                        value={formData.progress}
-                                        onChange={handleChange}
-                                        required
-                                        className={inputClass}
-                                    />
-
-                                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                                        <div
-                                            className="h-full rounded-full bg-blue-600 transition-all"
-                                            style={{
-                                                width: `${Math.min(
-                                                    Math.max(
-                                                        Number(
-                                                            formData.progress
-                                                        ) || 0,
-                                                        0
-                                                    ),
-                                                    100
-                                                )}%`
-                                            }}
-                                        ></div>
-                                    </div>
-                                </div>
-
-                                {/* Hours */}
-                                <div>
-                                    <label
-                                        htmlFor="task-hours"
-                                        className="mb-2 block text-sm font-semibold text-slate-700"
-                                    >
-                                        Hours Spent
-                                    </label>
-
-                                    <input
-                                        id="task-hours"
-                                        type="number"
-                                        name="hoursSpent"
-                                        min="0"
-                                        step="0.5"
-                                        value={formData.hoursSpent}
-                                        onChange={handleChange}
-                                        required
-                                        className={inputClass}
-                                    />
-                                </div>
-
+                                    {internships.map(
+                                        (internship) => (
+                                            <option
+                                                key={internship._id}
+                                                value={internship._id}
+                                            >
+                                                {internship.title}
+                                                {" - "}
+                                                {internship.intern?.name ||
+                                                    internship.intern?.fullName ||
+                                                    "Intern"}
+                                            </option>
+                                        )
+                                    )}
+                                </select>
                             </div>
 
-                            <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row">
+                            <div>
+                                <label
+                                    htmlFor="task-title"
+                                    className="mb-2 block text-sm font-semibold text-slate-700"
+                                >
+                                    Task Title
+                                </label>
 
+                                <input
+                                    id="task-title"
+                                    type="text"
+                                    name="title"
+                                    value={formData.title}
+                                    onChange={handleChange}
+                                    placeholder="Enter task title"
+                                    required
+                                    disabled={isSubmitting}
+                                    className={inputClass}
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    htmlFor="task-description"
+                                    className="mb-2 block text-sm font-semibold text-slate-700"
+                                >
+                                    Description
+                                </label>
+
+                                <textarea
+                                    id="task-description"
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    placeholder="Describe the task"
+                                    rows="4"
+                                    disabled={isSubmitting}
+                                    className={`${inputClass} resize-y`}
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    htmlFor="task-due-date"
+                                    className="mb-2 block text-sm font-semibold text-slate-700"
+                                >
+                                    Due Date
+                                </label>
+
+                                <input
+                                    id="task-due-date"
+                                    type="date"
+                                    name="dueDate"
+                                    value={formData.dueDate}
+                                    onChange={handleChange}
+                                    required
+                                    disabled={isSubmitting}
+                                    className={inputClass}
+                                />
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-5">
                                 <button
                                     type="submit"
-                                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                                    disabled={isSubmitting}
+                                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    Save Progress
+                                    {isSubmitting
+                                        ? "Assigning..."
+                                        : "Assign Task"}
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={cancelUpdate}
-                                    className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
-                                >
-                                    Cancel
-                                </button>
-
                             </div>
                         </form>
-                    </section>
-                )}
+                    )}
+                </section>
 
-                {/* Assigned Task List */}
+                {/* Assigned Tasks */}
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
                     <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                         <div className="flex items-center justify-between gap-4">
                             <div>
                                 <h3 className="text-xl font-bold text-slate-900">
-                                    My Assigned Tasks
+                                    Assigned Tasks
                                 </h3>
 
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Tasks assigned by your mentor.
+                                    Monitor the tasks assigned to your interns.
                                 </p>
                             </div>
 
@@ -500,8 +535,7 @@ const InternTaskManagement = () => {
                             </h4>
 
                             <p className="mt-1 text-sm text-slate-500">
-                                Tasks assigned by your mentor will appear
-                                here.
+                                Create your first task using the form above.
                             </p>
                         </div>
                     ) : (
@@ -513,8 +547,12 @@ const InternTaskManagement = () => {
                                             Task
                                         </th>
 
-                                        <th className="min-w-[280px] px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
-                                            Description
+                                        <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
+                                            Intern
+                                        </th>
+
+                                        <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
+                                            Internship
                                         </th>
 
                                         <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
@@ -532,10 +570,6 @@ const InternTaskManagement = () => {
                                         <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
                                             Hours
                                         </th>
-
-                                        <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
-                                            Action
-                                        </th>
                                     </tr>
                                 </thead>
 
@@ -546,20 +580,32 @@ const InternTaskManagement = () => {
                                             className="transition hover:bg-slate-50"
                                         >
                                             <td className="px-5 py-4 sm:px-6">
-                                                <p className="min-w-40 text-sm font-semibold text-slate-900">
+                                                <p className="text-sm font-semibold text-slate-900">
                                                     {task.title}
                                                 </p>
-                                            </td>
 
-                                            <td className="px-5 py-4 sm:px-6">
-                                                <p className="max-w-md text-sm leading-6 text-slate-600">
-                                                    {task.description ||
-                                                        "No description"}
-                                                </p>
+                                                {task.description && (
+                                                    <p className="mt-1 max-w-xs truncate text-xs text-slate-400">
+                                                        {task.description}
+                                                    </p>
+                                                )}
                                             </td>
 
                                             <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600 sm:px-6">
-                                                {formatDate(task.dueDate)}
+                                                {task.assignedTo?.name ||
+                                                    task.assignedTo?.fullName ||
+                                                    "N/A"}
+                                            </td>
+
+                                            <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600 sm:px-6">
+                                                {task.internship?.title ||
+                                                    "N/A"}
+                                            </td>
+
+                                            <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600 sm:px-6">
+                                                {formatDate(
+                                                    task.dueDate
+                                                )}
                                             </td>
 
                                             <td className="whitespace-nowrap px-5 py-4 sm:px-6">
@@ -605,24 +651,6 @@ const InternTaskManagement = () => {
                                             <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-700 sm:px-6">
                                                 {task.hoursSpent ?? 0}
                                             </td>
-
-                                            <td className="whitespace-nowrap px-5 py-4 text-right sm:px-6">
-                                                {updatingId === task._id ? (
-                                                    <span className="text-xs font-semibold text-blue-600">
-                                                        Updating...
-                                                    </span>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            startUpdate(task)
-                                                        }
-                                                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                                    >
-                                                        Update Progress
-                                                    </button>
-                                                )}
-                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -633,7 +661,7 @@ const InternTaskManagement = () => {
 
                 <footer className="py-8 text-center">
                     <p className="text-xs text-slate-400">
-                        InternTracker · Assigned Tasks
+                        InternTracker · Mentor Tasks
                     </p>
                 </footer>
 
@@ -642,4 +670,4 @@ const InternTaskManagement = () => {
     );
 };
 
-export default InternTaskManagement;
+export default MentorTasks;

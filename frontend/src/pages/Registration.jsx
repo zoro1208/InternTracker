@@ -1,40 +1,59 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useNavigate } from "react-router-dom";
 
-const Login = () => {
+import api from "../services/api";
+
+const Register = () => {
     const navigate = useNavigate();
-    const location = useLocation();
 
-    const { login } = useAuth();
-
+    const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [confirmPassword, setConfirmPassword] = useState("");
 
-    const registeredMessage = location.state?.message || "";
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         setError("");
+        setSuccess("");
+
+        if (password !== confirmPassword) {
+            setError("Passwords do not match.");
+            return;
+        }
+
+        if (password.length < 6) {
+            setError("Password must be at least 6 characters.");
+            return;
+        }
+
         setLoading(true);
 
         try {
-            const user = await login(email, password);
+            await api.post("/api/auth/register", {
+                name,
+                email,
+                password,
+            });
 
-            if (user.role === "ADMIN") {
-                navigate("/admin/dashboard");
-            } else if (user.role === "MENTOR") {
-                navigate("/mentor/dashboard");
-            } else if (user.role === "INTERN") {
-                navigate("/intern/dashboard");
-            }
+            setSuccess("Account created successfully. Redirecting to login...");
+
+            setName("");
+            setEmail("");
+            setPassword("");
+            setConfirmPassword("");
+
+            setTimeout(() => {
+                navigate("/login");
+            }, 1200);
         } catch (error) {
             setError(
                 error.response?.data?.message ||
-                "Login failed"
+                "Registration failed. Please try again."
             );
         } finally {
             setLoading(false);
@@ -69,18 +88,19 @@ const Login = () => {
                             </div>
 
                             <h2 className="text-3xl lg:text-4xl font-bold leading-tight">
-                                Manage internships.
+                                Start your
                                 <br />
-                                Track performance.
+                                internship journey.
                                 <br />
                                 <span className="text-blue-400">
-                                    Build progress.
+                                    Track your progress.
                                 </span>
                             </h2>
 
                             <p className="mt-6 text-slate-400 leading-relaxed max-w-md">
-                                A centralized platform for managing interns,
-                                tasks, daily updates, evaluations, and reports.
+                                Create your InternTracker account to access
+                                internships, tasks, daily updates,
+                                evaluations, and reports.
                             </p>
                         </div>
 
@@ -92,7 +112,7 @@ const Login = () => {
                                     </p>
 
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Track work
+                                        Manage work
                                     </p>
                                 </div>
 
@@ -102,7 +122,7 @@ const Login = () => {
                                     </p>
 
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Daily progress
+                                        Record progress
                                     </p>
                                 </div>
 
@@ -112,7 +132,7 @@ const Login = () => {
                                     </p>
 
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Monitor results
+                                        View performance
                                     </p>
                                 </div>
                             </div>
@@ -143,15 +163,35 @@ const Login = () => {
 
                         <div className="mb-8">
                             <h2 className="text-3xl font-bold text-slate-900">
-                                Welcome back
+                                Create your account
                             </h2>
 
                             <p className="mt-2 text-sm text-slate-500">
-                                Sign in to access your InternTracker account.
+                                Register to start using InternTracker.
                             </p>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
+                        <form onSubmit={handleSubmit} className="space-y-5">
+
+                            {/* Name */}
+                            <div>
+                                <label
+                                    htmlFor="name"
+                                    className="block text-sm font-medium text-slate-700 mb-2"
+                                >
+                                    Full name
+                                </label>
+
+                                <input
+                                    id="name"
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Enter your full name"
+                                    required
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400"
+                                />
+                            </div>
 
                             {/* Email */}
                             <div>
@@ -189,18 +229,36 @@ const Login = () => {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Enter your password"
                                     required
+                                    minLength={6}
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400"
+                                />
+
+                                <p className="mt-1.5 text-xs text-slate-400">
+                                    Minimum 6 characters.
+                                </p>
+                            </div>
+
+                            {/* Confirm Password */}
+                            <div>
+                                <label
+                                    htmlFor="confirmPassword"
+                                    className="block text-sm font-medium text-slate-700 mb-2"
+                                >
+                                    Confirm password
+                                </label>
+
+                                <input
+                                    id="confirmPassword"
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) =>
+                                        setConfirmPassword(e.target.value)
+                                    }
+                                    placeholder="Re-enter your password"
+                                    required
                                     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400"
                                 />
                             </div>
-
-                            {/* Registration Success */}
-                            {registeredMessage && (
-                                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
-                                    <p className="text-sm text-green-600">
-                                        {registeredMessage}
-                                    </p>
-                                </div>
-                            )}
 
                             {/* Error */}
                             {error && (
@@ -211,7 +269,16 @@ const Login = () => {
                                 </div>
                             )}
 
-                            {/* Login Button */}
+                            {/* Success */}
+                            {success && (
+                                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                                    <p className="text-sm text-green-600">
+                                        {success}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Register Button */}
                             <button
                                 type="submit"
                                 disabled={loading}
@@ -220,25 +287,24 @@ const Login = () => {
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                                        Logging in...
+                                        Creating account...
                                     </span>
                                 ) : (
-                                    "Login"
+                                    "Create account"
                                 )}
                             </button>
-
                         </form>
 
-                        {/* Create Account */}
+                        {/* Login Link */}
                         <div className="mt-7 text-center">
                             <p className="text-sm text-slate-500">
-                                Don't have an account?{" "}
+                                Already have an account?{" "}
                                 <button
                                     type="button"
-                                    onClick={() => navigate("/register")}
+                                    onClick={() => navigate("/login")}
                                     className="font-semibold text-blue-600 transition hover:text-blue-700"
                                 >
-                                    Create new account
+                                    Login
                                 </button>
                             </p>
                         </div>
@@ -248,7 +314,6 @@ const Login = () => {
                                 InternTracker · Internship Management System
                             </p>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -256,4 +321,4 @@ const Login = () => {
     );
 };
 
-export default Login;
+export default Register;

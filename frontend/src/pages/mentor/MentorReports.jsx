@@ -11,7 +11,7 @@ const getToday = () => {
 
 const getWeekStart = () => {
     const today = new Date(
-        `${getToday()}T00:00:00`
+        `${getToday()}T00:00:00+05:30`
     );
 
     const day = today.getDay();
@@ -42,13 +42,14 @@ const getMonthStart = () => {
     return `${today.substring(0, 7)}-01`;
 };
 
-const InternReports = () => {
-    const [internship, setInternship] = useState(null);
+const MentorReports = () => {
+    const [internships, setInternships] = useState([]);
     const [reports, setReports] = useState([]);
 
-    const [periodType, setPeriodType] = useState(
-        "WEEKLY"
-    );
+    const [formData, setFormData] = useState({
+        internship: "",
+        periodType: "WEEKLY"
+    });
 
     const [selectedReport, setSelectedReport] =
         useState(null);
@@ -65,7 +66,7 @@ const InternReports = () => {
             setError("");
 
             const [
-                internshipResponse,
+                internshipsResponse,
                 reportsResponse
             ] = await Promise.all([
                 api.get("/api/internships/my"),
@@ -73,15 +74,23 @@ const InternReports = () => {
             ]);
 
             const myInternships =
-                internshipResponse.data.internships || [];
+                internshipsResponse.data.internships || [];
 
-            setInternship(
-                myInternships[0] || null
-            );
+            setInternships(myInternships);
 
             setReports(
                 reportsResponse.data.reports || []
             );
+
+            if (
+                myInternships.length > 0 &&
+                !formData.internship
+            ) {
+                setFormData((previous) => ({
+                    ...previous,
+                    internship: myInternships[0]._id
+                }));
+            }
         } catch (error) {
             console.error(error);
 
@@ -98,17 +107,26 @@ const InternReports = () => {
         fetchData();
     }, []);
 
-    const handlePeriodTypeChange = (e) => {
-        setPeriodType(e.target.value);
+    const handleChange = (e) => {
+        setFormData({
+            ...formData,
+            [e.target.name]: e.target.value
+        });
+    };
+
+    const getPeriod = () => {
+        if (formData.periodType === "MONTHLY") {
+            return `${getMonthStart()} to ${getToday()}`;
+        }
+
+        return `${getWeekStart()} to ${getToday()}`;
     };
 
     const handleGenerate = async (e) => {
         e.preventDefault();
 
-        if (!internship?._id) {
-            setError(
-                "No internship is assigned to your account."
-            );
+        if (!formData.internship) {
+            setError("Please select an internship.");
             return;
         }
 
@@ -118,20 +136,11 @@ const InternReports = () => {
             setMessage("");
             setSelectedReport(null);
 
-            const periodStart =
-                periodType === "WEEKLY"
-                    ? getWeekStart()
-                    : getMonthStart();
-
-            const periodEnd = getToday();
-
             const response = await api.post(
                 "/api/reports/generate",
                 {
-                    internship: internship._id,
-                    periodType,
-                    periodStart,
-                    periodEnd
+                    internship: formData.internship,
+                    periodType: formData.periodType
                 }
             );
 
@@ -188,7 +197,9 @@ const InternReports = () => {
             return "N/A";
         }
 
-        return new Date(date).toLocaleDateString("en-IN");
+        return new Date(date).toLocaleDateString(
+            "en-IN"
+        );
     };
 
     const getStatusClasses = (status) => {
@@ -231,16 +242,16 @@ const InternReports = () => {
         return "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200";
     };
 
-    const getPeriodTypeClasses = (period) => {
-        const normalizedPeriod = String(period || "")
+    const getPeriodTypeClasses = (periodType) => {
+        const normalizedType = String(periodType || "")
             .trim()
             .toUpperCase();
 
-        if (normalizedPeriod === "WEEKLY") {
+        if (normalizedType === "WEEKLY") {
             return "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200";
         }
 
-        if (normalizedPeriod === "MONTHLY") {
+        if (normalizedType === "MONTHLY") {
             return "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-200";
         }
 
@@ -249,6 +260,43 @@ const InternReports = () => {
 
     const inputClass =
         "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
+
+    const summaryCards = selectedReport
+        ? [
+              {
+                  title: "Working Days",
+                  value: selectedReport.totalWorkingDays ?? 0,
+                  description: "Expected working days",
+                  icon: "W"
+              },
+              {
+                  title: "Actual Hours",
+                  value: selectedReport.totalActualHours ?? 0,
+                  description: "Hours recorded",
+                  icon: "H"
+              },
+              {
+                  title: "Overtime",
+                  value: selectedReport.overtimeHours ?? 0,
+                  description: "Overtime hours",
+                  icon: "O"
+              },
+              {
+                  title: "Task Progress",
+                  value: `${selectedReport.averageTaskProgress ?? 0}%`,
+                  description: "Average task progress",
+                  icon: "P"
+              },
+              {
+                  title: "Evaluation",
+                  value:
+                      selectedReport.evaluationScore ??
+                      "N/A",
+                  description: "Final evaluation score",
+                  icon: "E"
+              }
+          ]
+        : [];
 
     if (loading) {
         return (
@@ -272,7 +320,7 @@ const InternReports = () => {
 
                 {/* Back Button */}
                 <div className="mb-4">
-                    <BackButton fallback="/intern/dashboard" />
+                    <BackButton fallback="/mentor/dashboard" />
                 </div>
 
                 {/* Header */}
@@ -295,12 +343,12 @@ const InternReports = () => {
 
                     <div className="mt-6">
                         <h2 className="text-2xl font-bold text-white sm:text-3xl">
-                            My Reports
+                            Mentor Reports
                         </h2>
 
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                            Generate and view weekly or monthly
-                            internship performance reports.
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                            Generate and view internship performance
+                            reports for your interns.
                         </p>
                     </div>
                 </header>
@@ -324,69 +372,105 @@ const InternReports = () => {
 
                 {/* Generate Report */}
                 <section className="mb-8 rounded-2xl border border-slate-200 bg-white shadow-sm">
-
                     <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                         <h3 className="text-xl font-bold text-slate-900">
                             Generate Report
                         </h3>
 
                         <p className="mt-1 text-sm text-slate-500">
-                            Generate a report for your assigned internship.
+                            Generate a weekly or monthly performance report
+                            for one of your internships.
                         </p>
                     </div>
 
-                    {internship ? (
+                    {internships.length === 0 ? (
+                        <div className="px-5 py-12 text-center sm:px-6">
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500">
+                                R
+                            </div>
+
+                            <h4 className="mt-4 text-base font-semibold text-slate-900">
+                                No internships assigned
+                            </h4>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                                You need an assigned internship before
+                                generating a report.
+                            </p>
+                        </div>
+                    ) : (
                         <form
                             onSubmit={handleGenerate}
                             className="space-y-6 px-5 py-6 sm:px-6"
                         >
-                            {/* Internship */}
-                            <div>
-                                <label
-                                    htmlFor="report-internship"
-                                    className="mb-2 block text-sm font-semibold text-slate-700"
-                                >
-                                    Internship
-                                </label>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
 
-                                <input
-                                    id="report-internship"
-                                    type="text"
-                                    value={
-                                        internship.title ||
-                                        "Assigned Internship"
-                                    }
-                                    readOnly
-                                    className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-medium text-slate-600 outline-none"
-                                />
-                            </div>
+                                {/* Internship */}
+                                <div>
+                                    <label
+                                        htmlFor="report-internship"
+                                        className="mb-2 block text-sm font-semibold text-slate-700"
+                                    >
+                                        Internship
+                                    </label>
 
-                            {/* Report Type */}
-                            <div>
-                                <label
-                                    htmlFor="report-period-type"
-                                    className="mb-2 block text-sm font-semibold text-slate-700"
-                                >
-                                    Report Type
-                                </label>
+                                    <select
+                                        id="report-internship"
+                                        name="internship"
+                                        value={formData.internship}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={generating}
+                                        className={inputClass}
+                                    >
+                                        <option value="">
+                                            Select Internship
+                                        </option>
 
-                                <select
-                                    id="report-period-type"
-                                    value={periodType}
-                                    onChange={
-                                        handlePeriodTypeChange
-                                    }
-                                    disabled={generating}
-                                    className={inputClass}
-                                >
-                                    <option value="WEEKLY">
-                                        Weekly
-                                    </option>
+                                        {internships.map(
+                                            (internship) => (
+                                                <option
+                                                    key={internship._id}
+                                                    value={internship._id}
+                                                >
+                                                    {internship.title}
+                                                    {" - "}
+                                                    {internship.intern?.name ||
+                                                        internship.intern?.fullName ||
+                                                        "Intern"}
+                                                </option>
+                                            )
+                                        )}
+                                    </select>
+                                </div>
 
-                                    <option value="MONTHLY">
-                                        Monthly
-                                    </option>
-                                </select>
+                                {/* Report Type */}
+                                <div>
+                                    <label
+                                        htmlFor="report-period-type"
+                                        className="mb-2 block text-sm font-semibold text-slate-700"
+                                    >
+                                        Report Type
+                                    </label>
+
+                                    <select
+                                        id="report-period-type"
+                                        name="periodType"
+                                        value={formData.periodType}
+                                        onChange={handleChange}
+                                        disabled={generating}
+                                        className={inputClass}
+                                    >
+                                        <option value="WEEKLY">
+                                            Weekly
+                                        </option>
+
+                                        <option value="MONTHLY">
+                                            Monthly
+                                        </option>
+                                    </select>
+                                </div>
+
                             </div>
 
                             {/* Period */}
@@ -396,9 +480,7 @@ const InternReports = () => {
                                 </p>
 
                                 <p className="mt-1 text-sm font-semibold text-blue-900">
-                                    {periodType === "WEEKLY"
-                                        ? `${getWeekStart()} → ${getToday()}`
-                                        : `${getMonthStart()} → ${getToday()}`}
+                                    {getPeriod()}
                                 </p>
                             </div>
 
@@ -414,21 +496,6 @@ const InternReports = () => {
                                 </button>
                             </div>
                         </form>
-                    ) : (
-                        <div className="px-5 py-12 text-center sm:px-6">
-                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-lg font-bold text-amber-700">
-                                R
-                            </div>
-
-                            <h4 className="mt-4 text-base font-semibold text-slate-900">
-                                No internship assigned
-                            </h4>
-
-                            <p className="mt-1 text-sm text-slate-500">
-                                An internship assignment is required before
-                                generating reports.
-                            </p>
-                        </div>
                     )}
                 </section>
 
@@ -436,7 +503,7 @@ const InternReports = () => {
                 {selectedReport && (
                     <section className="mb-8">
 
-                        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <h3 className="text-2xl font-bold text-slate-900">
@@ -456,6 +523,7 @@ const InternReports = () => {
                                 </div>
 
                                 <p className="mt-1 text-sm text-slate-500">
+                                    Period:{" "}
                                     {formatDate(
                                         selectedReport.periodStart
                                     )}
@@ -467,178 +535,220 @@ const InternReports = () => {
                             </div>
                         </div>
 
+                        {/* Report Summary */}
+                        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                            {summaryCards.map((card) => (
+                                <div
+                                    key={card.title}
+                                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-500">
+                                                {card.title}
+                                            </p>
+
+                                            <p className="mt-2 text-2xl font-bold text-slate-900">
+                                                {card.value}
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-slate-400">
+                                                {card.description}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-600">
+                                            {card.icon}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
                         {/* Attendance & Hours */}
-                        <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
                             <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                                 <h4 className="text-lg font-bold text-slate-900">
                                     Attendance & Hours
                                 </h4>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Working Days
-                                    </p>
+                            <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                                <div className="space-y-0">
+                                    <div className="flex justify-between gap-4 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Total Working Days
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.totalWorkingDays ??
-                                            0}
-                                    </p>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.totalWorkingDays ??
+                                                0}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Updates Submitted
+                                        </span>
+
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.submittedUpdateDays ??
+                                                0}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Missing Updates
+                                        </span>
+
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.missingUpdateDays ??
+                                                0}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Updates Submitted
-                                    </p>
+                                <div>
+                                    <div className="flex justify-between gap-4 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Expected Hours
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.submittedUpdateDays ??
-                                            0}
-                                    </p>
-                                </div>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.totalExpectedHours ??
+                                                0}
+                                        </span>
+                                    </div>
 
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Missing Updates
-                                    </p>
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Actual Hours
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-amber-700">
-                                        {selectedReport.missingUpdateDays ??
-                                            0}
-                                    </p>
-                                </div>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.totalActualHours ??
+                                                0}
+                                        </span>
+                                    </div>
 
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Expected Hours
-                                    </p>
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Overtime Hours
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.totalExpectedHours ??
-                                            0}
-                                    </p>
-                                </div>
+                                        <span className="text-sm font-semibold text-purple-700">
+                                            {selectedReport.overtimeHours ??
+                                                0}
+                                        </span>
+                                    </div>
 
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Actual Hours
-                                    </p>
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Weekend Hours
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.totalActualHours ??
-                                            0}
-                                    </p>
-                                </div>
-
-                                <div className="rounded-xl bg-purple-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-purple-600">
-                                        Overtime Hours
-                                    </p>
-
-                                    <p className="mt-2 text-2xl font-bold text-purple-800">
-                                        {selectedReport.overtimeHours ?? 0}
-                                    </p>
-                                </div>
-
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Weekend Hours
-                                    </p>
-
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.weekendHours ?? 0}
-                                    </p>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.weekendHours ??
+                                                0}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                        </section>
+                        </div>
 
                         {/* Tasks */}
-                        <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
                             <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                                 <h4 className="text-lg font-bold text-slate-900">
                                     Tasks
                                 </h4>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 sm:p-6">
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Total Tasks
-                                    </p>
+                            <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                                <div>
+                                    <div className="flex justify-between gap-4 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Total Tasks
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.totalTasks ?? 0}
-                                    </p>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.totalTasks ?? 0}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Completed
+                                        </span>
+
+                                        <span className="text-sm font-semibold text-emerald-700">
+                                            {selectedReport.completedTasks ??
+                                                0}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            In Progress
+                                        </span>
+
+                                        <span className="text-sm font-semibold text-blue-700">
+                                            {selectedReport.inProgressTasks ??
+                                                0}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                <div className="rounded-xl bg-emerald-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
-                                        Completed
-                                    </p>
+                                <div>
+                                    <div className="flex justify-between gap-4 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Pending
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-emerald-800">
-                                        {selectedReport.completedTasks ??
-                                            0}
-                                    </p>
-                                </div>
+                                        <span className="text-sm font-semibold text-amber-700">
+                                            {selectedReport.pendingTasks ??
+                                                0}
+                                        </span>
+                                    </div>
 
-                                <div className="rounded-xl bg-blue-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-blue-600">
-                                        In Progress
-                                    </p>
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Delayed
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-blue-800">
-                                        {selectedReport.inProgressTasks ??
-                                            0}
-                                    </p>
-                                </div>
+                                        <span className="text-sm font-semibold text-red-700">
+                                            {selectedReport.delayedTasks ??
+                                                0}
+                                        </span>
+                                    </div>
 
-                                <div className="rounded-xl bg-amber-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-amber-600">
-                                        Pending
-                                    </p>
+                                    <div className="flex justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                                        <span className="text-sm text-slate-500">
+                                            Average Task Progress
+                                        </span>
 
-                                    <p className="mt-2 text-2xl font-bold text-amber-800">
-                                        {selectedReport.pendingTasks ??
-                                            0}
-                                    </p>
-                                </div>
-
-                                <div className="rounded-xl bg-red-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-red-600">
-                                        Delayed
-                                    </p>
-
-                                    <p className="mt-2 text-2xl font-bold text-red-800">
-                                        {selectedReport.delayedTasks ??
-                                            0}
-                                    </p>
-                                </div>
-
-                                <div className="rounded-xl bg-slate-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                                        Average Progress
-                                    </p>
-
-                                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                                        {selectedReport.averageTaskProgress ??
-                                            0}
-                                        %
-                                    </p>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            {selectedReport.averageTaskProgress ??
+                                                0}
+                                            %
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                        </section>
+                        </div>
 
                         {/* Evaluation */}
-                        <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
                             <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                                 <h4 className="text-lg font-bold text-slate-900">
                                     Evaluation
                                 </h4>
                             </div>
 
-                            {selectedReport.evaluationScore !== null ? (
+                            {selectedReport.evaluationScore !== null &&
+                            selectedReport.evaluationScore !==
+                                undefined ? (
                                 <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 sm:p-6">
 
                                     <div className="rounded-xl bg-slate-900 p-5">
@@ -653,61 +763,46 @@ const InternReports = () => {
                                         </p>
                                     </div>
 
-                                    <div className="rounded-xl bg-slate-50 p-5">
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Communication
-                                        </p>
+                                    {[
+                                        {
+                                            label: "Communication",
+                                            value:
+                                                selectedReport.communication
+                                        },
+                                        {
+                                            label: "Technical Skill",
+                                            value:
+                                                selectedReport.technicalSkill
+                                        },
+                                        {
+                                            label: "Punctuality",
+                                            value:
+                                                selectedReport.punctuality
+                                        },
+                                        {
+                                            label: "Task Completion",
+                                            value:
+                                                selectedReport.taskCompletion
+                                        },
+                                        {
+                                            label: "Teamwork",
+                                            value:
+                                                selectedReport.teamwork
+                                        }
+                                    ].map((item) => (
+                                        <div
+                                            key={item.label}
+                                            className="rounded-xl border border-slate-200 bg-slate-50 p-5"
+                                        >
+                                            <p className="text-sm font-medium text-slate-500">
+                                                {item.label}
+                                            </p>
 
-                                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                                            {selectedReport.communication ??
-                                                "N/A"}
-                                        </p>
-                                    </div>
-
-                                    <div className="rounded-xl bg-slate-50 p-5">
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Technical Skill
-                                        </p>
-
-                                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                                            {selectedReport.technicalSkill ??
-                                                "N/A"}
-                                        </p>
-                                    </div>
-
-                                    <div className="rounded-xl bg-slate-50 p-5">
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Punctuality
-                                        </p>
-
-                                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                                            {selectedReport.punctuality ??
-                                                "N/A"}
-                                        </p>
-                                    </div>
-
-                                    <div className="rounded-xl bg-slate-50 p-5">
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Task Completion
-                                        </p>
-
-                                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                                            {selectedReport.taskCompletion ??
-                                                "N/A"}
-                                        </p>
-                                    </div>
-
-                                    <div className="rounded-xl bg-slate-50 p-5">
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Teamwork
-                                        </p>
-
-                                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                                            {selectedReport.teamwork ??
-                                                "N/A"}
-                                        </p>
-                                    </div>
-
+                                            <p className="mt-2 text-2xl font-bold text-slate-900">
+                                                {item.value ?? "N/A"}
+                                            </p>
+                                        </div>
+                                    ))}
                                 </div>
                             ) : (
                                 <div className="px-5 py-10 text-center sm:px-6">
@@ -717,24 +812,23 @@ const InternReports = () => {
                                     </p>
                                 </div>
                             )}
-                        </section>
+                        </div>
 
                         {/* Daily Breakdown */}
-                        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                             <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                                 <h4 className="text-lg font-bold text-slate-900">
                                     Daily Breakdown
                                 </h4>
 
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Daily activity, working hours, and
-                                    overtime.
+                                    Daily activity, hours, and overtime for
+                                    the selected period.
                                 </p>
                             </div>
 
                             {!selectedReport.dailyBreakdown ||
-                            selectedReport.dailyBreakdown.length ===
-                                0 ? (
+                            selectedReport.dailyBreakdown.length === 0 ? (
                                 <div className="px-5 py-10 text-center sm:px-6">
                                     <p className="text-sm text-slate-500">
                                         No daily activity found.
@@ -778,7 +872,7 @@ const InternReports = () => {
                                                         key={index}
                                                         className="transition hover:bg-slate-50"
                                                     >
-                                                        <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-slate-900 sm:px-6">
+                                                        <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-900 sm:px-6">
                                                             {day.date?.substring(
                                                                 0,
                                                                 10
@@ -827,13 +921,12 @@ const InternReports = () => {
                                     </table>
                                 </div>
                             )}
-                        </section>
+                        </div>
                     </section>
                 )}
 
                 {/* Previous Reports */}
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
                     <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                         <div className="flex items-center justify-between gap-4">
                             <div>
@@ -842,7 +935,7 @@ const InternReports = () => {
                                 </h3>
 
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Previously generated reports.
+                                    Previously generated internship reports.
                                 </p>
                             </div>
 
@@ -863,7 +956,7 @@ const InternReports = () => {
                             </h4>
 
                             <p className="mt-1 text-sm text-slate-500">
-                                Your generated reports will appear here.
+                                Generated reports will appear here.
                             </p>
                         </div>
                     ) : (
@@ -871,6 +964,14 @@ const InternReports = () => {
                             <table className="min-w-full text-left">
                                 <thead className="bg-slate-50">
                                     <tr>
+                                        <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
+                                            Internship
+                                        </th>
+
+                                        <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
+                                            Intern
+                                        </th>
+
                                         <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6">
                                             Type
                                         </th>
@@ -907,6 +1008,20 @@ const InternReports = () => {
                                             key={report._id}
                                             className="transition hover:bg-slate-50"
                                         >
+                                            <td className="px-5 py-4 sm:px-6">
+                                                <p className="min-w-40 text-sm font-semibold text-slate-900">
+                                                    {report.internship
+                                                        ?.title ||
+                                                        "N/A"}
+                                                </p>
+                                            </td>
+
+                                            <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600 sm:px-6">
+                                                {report.intern?.name ||
+                                                    report.intern?.fullName ||
+                                                    "N/A"}
+                                            </td>
+
                                             <td className="whitespace-nowrap px-5 py-4 sm:px-6">
                                                 <span
                                                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getPeriodTypeClasses(
@@ -941,23 +1056,27 @@ const InternReports = () => {
                                                 {report.overtimeHours ?? 0}
                                             </td>
 
-                                            <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-slate-900 sm:px-6">
-                                                {report.evaluationScore ??
-                                                    "N/A"}
+                                            <td className="whitespace-nowrap px-5 py-4 sm:px-6">
+                                                <span className="font-semibold text-slate-900">
+                                                    {report.evaluationScore ??
+                                                        "N/A"}
+                                                </span>
                                             </td>
 
-                                            <td className="px-5 py-4 text-right sm:px-6">
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        handleViewReport(
-                                                            report._id
-                                                        )
-                                                    }
-                                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                                >
-                                                    View
-                                                </button>
+                                            <td className="px-5 py-4 sm:px-6">
+                                                <div className="flex justify-end">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            handleViewReport(
+                                                                report._id
+                                                            )
+                                                        }
+                                                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                                    >
+                                                        View Report
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -969,7 +1088,7 @@ const InternReports = () => {
 
                 <footer className="py-8 text-center">
                     <p className="text-xs text-slate-400">
-                        InternTracker · My Reports
+                        InternTracker · Mentor Reports
                     </p>
                 </footer>
 
@@ -978,4 +1097,4 @@ const InternReports = () => {
     );
 };
 
-export default InternReports;
+export default MentorReports;
